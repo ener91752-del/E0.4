@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة الهروب من الوحش - شبيهة سايلنت كاستل</title>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: Tahoma, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+        }
+        h1 { color: #38bdf8; margin: 5px; font-size: 22px; }
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            background: #1e293b;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .stats span { color: #4ade80; font-weight: bold; }
+        
+        .game-container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: #1e293b;
+            border: 3px solid #334155;
+            border-radius: 12px;
+            padding: 15px;
+            position: relative;
+        }
+
+        .room {
+            background: #0f172a;
+            border: 2px dashed #475569;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 250px;
+            position: relative;
+        }
+
+        .bed {
+            background: #3b82f6;
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .door-section {
+            background: #64748b;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .turrets-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .slot {
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .slot:hover { background: #475569; }
+
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+        button:hover { background: #059669; }
+        button:disabled { background: #475569; cursor: not-allowed; }
+
+        .monster-status {
+            margin-top: 15px;
+            background: #7f1d1d;
+            border: 1px solid #ef4444;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .hidden { display: none !important; }
+        
+        .game-over {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 12px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🏰 سكن الرعب (النسخة المصغرة)</h1>
+    
+    <div class="stats">
+        <div>الذهب: <span id="gold">25</span> 🪙</div>
+        <div>الوقت: <span id="time">0</span> ثانية ⏱️</div>
+    </div>
+
+    <div class="game-container">
+        <div class="room">
+            <!-- السرير (مصدر الدخل) -->
+            <div class="bed">
+                🛏️ السرير (المستوى <span id="bed-level">1</span>)<br>
+                الدخل: <span id="bed-income">2</span> ذهب/ثانية<br>
+                <button onclick="upgradeBed()">ترقية السرير (<span id="bed-cost">20</span> ذهب)</button>
+            </div>
+
+            <!-- الباب -->
+            <div class="door-section">
+                🚪 الباب (HP: <span id="door-hp">150</span>/<span id="door-max-hp">150</span>)<br>
+                <button onclick="upgradeDoor()">ترقية الباب (<span id="door-cost">15</span> ذهب)</button>
+            </div>
+
+            <!-- الأبراج الدفاعية -->
+            <div class="turrets-grid">
+                <div class="slot" id="slot-0" onclick="buildTurret(0)">
+                    ➕ بناء برج دفاعي<br>(التكلفة: 25)
+                </div>
+                <div class="slot" id="slot-1" onclick="buildTurret(1)">
+                    ➕ بناء برج دفاعي<br>(التكلفة: 25)
+                </div>
+            </div>
+        </div>
+
+        <!-- حالة الوحش -->
+        <div class="monster-status" id="monster-box">
+            👻 حالة الوحش: يستعد للهجوم...
+        </div>
+
+        <!-- شاشة النهاية -->
+        <div id="game-over-screen" class="game-over hidden">
+            <h2 id="end-title" style="color: #ef4444;">لقد تم القضاء عليك! 💀</h2>
+            <p id="end-desc">الوحش حطم الباب والتهمك في الظلام.</p>
+            <button onclick="restartGame()">إعادة المحاولة</button>
+        </div>
+    </div>
+
+<script>
+    let gold = 25;
+    let time = 0;
+    let bedLevel = 1;
+    let bedCost = 20;
+    let bedIncome = 2;
+    
+    let doorHp = 150;
+    let doorMaxHp = 150;
+    let doorLevel = 1;
+    let doorCost = 15;
+
+    let turrets = [null, null]; 
+    let monsterAttackPower = 1; // يبدأ ضعيفاً ليعطيك فرصة للتجهيز
+    let gameInterval = null;
+    let monsterInterval = null;
+
+    function startGame() {
+        // مسح أي مؤقتات سابقة لضمان عدم التداخل
+        clearInterval(gameInterval);
+        clearInterval(monsterInterval);
+
+        gameInterval = setInterval(() => {
+            gold += bedIncome;
+            time++;
+            updateUI();
+            checkMonsterUpgrade();
+        }, 1000);
+
+        startMonsterAttack();
+    }
+
+    function updateUI() {
+        document.getElementById("gold").innerText = gold;
+        document.getElementById("time").innerText = time;
+        document.getElementById("bed-level").innerText = bedLevel;
+        document.getElementById("bed-income").innerText = bedIncome;
+        document.getElementById("bed-cost").innerText = bedCost;
+        document.getElementById("door-hp").innerText = Math.max(0, doorHp);
+        document.getElementById("door-max-hp").innerText = doorMaxHp;
+        document.getElementById("door-cost").innerText = doorCost;
+    }
+
+    function upgradeBed() {
+        if (gold >= bedCost) {
+            gold -= bedCost;
+            bedLevel++;
+            bedIncome += 2;
+            bedCost = Math.floor(bedCost * 1.7);
+            updateUI();
+        } else {
+            alert("لا يوجد ذهب كافٍ!");
+        }
+    }
+
+    function upgradeDoor() {
+        if (gold >= doorCost) {
+            gold -= doorCost;
+            doorLevel++;
+            doorMaxHp += 70;
+            doorHp = doorMaxHp; 
+            doorCost = Math.floor(doorCost * 1.6);
+            updateUI();
+        } else {
+            alert("لا يوجد ذهب كافٍ!");
+        }
+    }
+
+    function buildTurret(index) {
+        let cost = 25 * (turrets[index] ? turrets[index] + 1 : 1);
+        if (gold >= cost) {
+            gold -= cost;
+            if (!turrets[index]) {
+                turrets[index] = 1; 
+            } else {
+                turrets[index]++; 
+            }
+            updateTurretUI(index);
+            updateUI();
+        } else {
+            alert("لا يوجد ذهب كافٍ لبناء أو ترقية البرج!");
+        }
+    }
+
+    function updateTurretUI(index) {
+        let slot = document.getElementById(`slot-${index}`);
+        let level = turrets[index];
+        let nextCost = 25 * (level + 1);
+        slot.innerHTML = `🔫 برج دفاعي<br>المستوى: ${level}<br><span style="font-size:10px">ترقية: ${nextCost} ذهب</span>`;
+    }
+
+    function startMonsterAttack() {
+        monsterInterval = setInterval(() => {
+            let totalDmg = 0;
+            turrets.forEach(t => {
+                if (t) totalDmg += t * 4;
+            });
+
+            let damageDealt = monsterAttackPower - Math.floor(doorLevel * 0.4);
+            if (damageDealt < 1) damageDealt = 1;
+            
+            doorHp -= damageDealt;
+
+            let statusBox = document.getElementById("monster-box");
+            if (totalDmg > 0) {
+                statusBox.innerHTML = `⚠️ الوحش يهاجم الباب! (أبراجك تسبب ${totalDmg} ضرر للوحش)`;
+            } else {
+                statusBox.innerHTML = `⚠️ الوحش يهاجم الباب! ابنِ أبراجاً للدفاع عن نفسك بسرعة!`;
+            }
+
+            if (doorHp <= 0) {
+                endGame();
+            }
+
+            updateUI();
+        }, 1500);
+    }
+
+    function checkMonsterUpgrade() {
+        if (time === 10) {
+            monsterAttackPower = 3;
+            document.getElementById("monster-box").style.background = "#b91c1c";
+        } else if (time === 25) {
+            monsterAttackPower = 6;
+        } else if (time === 50) {
+            monsterAttackPower = 10;
+        }
+    }
+
+    function endGame() {
+        clearInterval(gameInterval);
+        clearInterval(monsterInterval);
+    
+        // إظهار شاشة النهاية
+        let gameOverScreen = document.getElementById("game-over-screen");
+        gameOverScreen.classList.remove("hidden");
+    }
+
+    function restartGame() {
+        // إعادة تعيين المتغيرات
+        gold = 25;
+        time = 0;
+        bedLevel = 1;
+        bedCost = 20;
+        bedIncome = 2;
+        doorHp = 150;
+        doorMaxHp = 150;
+        doorLevel = 1;
+        doorCost = 15;
+        turrets = [null, null];
+        monsterAttackPower = 1;
+        
+        // إعادة الواجهة للحالة الافتراضية
+        document.getElementById("slot-0").innerHTML = `➕ بناء برج دفاعي<br>(التكلفة: 25)`;
+        document.getElementById("slot-1").innerHTML = `➕ بناء برج دفاعي<br>(التكلفة: 25)`;
+        document.getElementById("monster-box").style.background = "#7f1d1d";
+        document.getElementById("monster-box").innerHTML = `👻 حالة الوحش: يستعد للهجوم...`;
+        
+        // إخفاء شاشة الخسارة
+        document.getElementById("game-over-screen").classList.add("hidden");
+        
+        // بدء اللعبة من جديد
+        startGame();
+    }
+
+    // التشغيل الأول
+    startGame();
+</script>
+
+</body>
+  </html>
+  
